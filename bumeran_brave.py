@@ -7,6 +7,9 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 import os, time, random, urllib.parse, re
 from urllib.parse import urlparse, urlunparse
+import unicodedata
+import re
+import urllib.parse
 
 # ==================== CONFIG ====================
 BRAVE_PATH = r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
@@ -15,10 +18,10 @@ SCRIPT_DIR = os.path.dirname(__file__)
 PROFILE_DIR = os.path.join(SCRIPT_DIR, "brave_profile")   # perfil dedicado (no toca tu Brave personal)
 os.makedirs(PROFILE_DIR, exist_ok=True)
 
-PALABRAS = ["Soporte Técnico", "programador","oficina","desarrollador", "Administrativo", "IT"]
+PALABRAS = ["Soporte Técnico", "programador","oficina","desarrollador","unicenter" ".net", "Administrativo", "IT"]
 CIUDAD = "Buenos Aires"
 PAGINAS_MAX = 3
-MAX_POR_PALABRA = 3
+MAX_POR_PALABRA = 8
 MAX_TOTAL = 20
 REVIEW_MODE = False
 KEEP_OPEN_AFTER_RUN = True
@@ -32,16 +35,31 @@ def normalize_url(u: str) -> str:
     return urlunparse((p.scheme, p.netloc, p.path, "", "", ""))
 
 def candidate_result_urls(keyword: str, city: str):
-    # Varias rutas según sesión/geo
-    q = urllib.parse.quote(keyword)
-    l = urllib.parse.quote(city)
-    return [
-        f"https://www.bumeran.com.ar/empleos/?q={q}&l={l}",
-        f"https://www.bumeran.com.ar/empleos/?q={q}",
-        f"https://www.bumeran.com.ar/empleos/buenos-aires/?q={q}",
-        "https://www.bumeran.com.ar/empleos/buenos-aires/",
-        "https://www.bumeran.com.ar/empleos/",
-    ]
+    """
+    Genera variantes de URLs de búsqueda para Bumeran.
+    Incluye Buenos Aires y Capital Federal.
+    """
+    ciudades = [city, "Capital Federal"]  # <- probamos ambas
+    urls = []
+
+    for ciudad in ciudades:
+        q = urllib.parse.quote(keyword)
+        l = urllib.parse.quote(ciudad)
+
+        city_slug = slugify_es(ciudad)       # "Capital Federal" -> "capital-federal"
+        city_path = f"en-{city_slug}"         # -> "en-capital-federal"
+        kw_slug   = slugify_es(keyword)
+
+        urls.extend([
+            # Canónica SEO
+            f"https://www.bumeran.com.ar/{city_path}/empleos-busqueda-{kw_slug}.html",
+            # Variante sin “busqueda”
+            f"https://www.bumeran.com.ar/{city_path}/empleos-{kw_slug}.html",
+    
+        ])
+
+    return urls
+
 
 def click_cookies_si_aparece(timeout=5):
     """Cierra banners de cookies para no bloquear inputs/botones."""
@@ -187,6 +205,18 @@ BAD_SUBSTR = (
     "/terminos", "/privacidad", "/faq", "/ayuda", "/blog", "/articulo",
     "/curriculum", "/orientacion-laboral"
 )
+
+
+def slugify_es(s: str) -> str:
+    s = (s or "").strip().lower()
+    s = "".join(
+        c for c in unicodedata.normalize("NFD", s)
+        if unicodedata.category(c) != "Mn"
+    )
+    s = re.sub(r"[^a-z0-9\s-]", " ", s)
+    s = re.sub(r"\s+", "-", s).strip("-")
+    s = re.sub(r"-+", "-", s)
+    return s
 
 def es_url_aviso(href: str) -> bool:
     if not href or "bumeran.com.ar" not in href:
